@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <endian.h>
+#include <math.h>
 
 // esp-idf apis
 #include <sdkconfig.h>
@@ -32,38 +33,55 @@
 #include "host/ble_store.h"
 #include "os/os_mbuf.h"
 
-char name[] = "Random Number Generator";
-char short_name[] = "RNG";
+char name[] = "Acceleration Sample Generator";
+char short_name[] = "ASG";
 
-ble_uuid128_t rng_svc_uuid = BLE_UUID128_INIT(
+ble_uuid128_t asg_svc_uuid = BLE_UUID128_INIT(
      0x11, 0x22, 0x33, 0x44,
      0x11, 0x22, 0x33, 0x44,
      0x11, 0x22, 0x33, 0x44,
      0x11, 0x22, 0x33, 0x44,
     );
 
-ble_uuid128_t rng_chr_uuid = BLE_UUID128_INIT(
+ble_uuid128_t asg_chr_uuid = BLE_UUID128_INIT(
      0x55, 0x66, 0x77, 0x88,
      0x55, 0x66, 0x77, 0x88,
      0x55, 0x66, 0x77, 0x88,
      0x55, 0x66, 0x77, 0x88,
     );
 
-uint16_t rng_char_attr_handle;
+uint16_t asg_char_attr_handle;
+
+#define ACCEL_RANGE_G 16.0f
+#define ATTENUATION 0.70f /* ejes secundarios = 70 % del principal */
+typedef struct { float ax, ay, az; } accel_sample_t;
+accel_sample_t simulate_accel(void) {
+  /* Eje principal: sinusoide + ruido uniforme */
+  static float phase = 0.0f;
+  phase += 0.01f; /* avance de fase por muestra a 1000 Hz */
+  float main_val = ACCEL_RANGE_G * sinf(phase)
+    + ((float)rand() / RAND_MAX - 0.5f) * 1.0f;
+  accel_sample_t s = {
+    .ax = main_val,
+    .ay = main_val * ATTENUATION + ((float)rand()/RAND_MAX - 0.5f)*0.5f,
+    .az = main_val * ATTENUATION + ((float)rand()/RAND_MAX - 0.5f)*0.5f,
+  };
+  return s;
+}
 
 int chr_access(uint16_t conn_handle, uint16_t attr_handle,
     struct ble_gatt_access_ctxt *ctxt, void *arg) {
 
   if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-    if (attr_handle != rng_char_attr_handle) {
+    if (attr_handle != asg_char_attr_handle) {
       return BLE_ATT_ERR_ATTR_NOT_FOUND;
     }
 
-    uint32_t rng_val = rand() % 1000;
-    os_mbuf_append(ctxt->om, &rng_val, sizeof(rng_val));
+    accel_sample_t accel_sample = simulate_accel();
+    os_mbuf_append(ctxt->om, &accel_sample, sizeof(accel_sample));
 
 
-    printf("Se leyó el valor %lu de la caracteristica rng\n", rng_val);
+    printf("Se leyó el valores x=%f, y=%f, z=%f de la caracteristica accel_sample\n", accel_sample.ax, accel_sample.ay, accel_sample.az);
     return 0;
   }
 
@@ -73,13 +91,13 @@ int chr_access(uint16_t conn_handle, uint16_t attr_handle,
 struct ble_gatt_svc_def gatt_svcs[] = {
   {
     .type = BLE_GATT_SVC_TYPE_PRIMARY,
-    .uuid = &rng_svc_uuid.u,
+    .uuid = &asg_svc_uuid.u,
     .characteristics = (struct ble_gatt_chr_def[]){
       {
-        .uuid = &rng_chr_uuid.u,
+        .uuid = &asg_chr_uuid.u,
         .access_cb = chr_access,
         .flags = BLE_GATT_CHR_F_READ,
-        .val_handle = &rng_char_attr_handle,
+        .val_handle = &asg_char_attr_handle,
       },
       {0}
     }
