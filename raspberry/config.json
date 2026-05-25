@@ -1,7 +1,8 @@
 {
   "esp32": {
     "name": "GATT BLE Server",
-    "accel_char_uuid": "88776655-8877-6655-8877-665588776655"
+    "accel_char_uuid": "88776655-8877-6655-8877-665588776655",
+    "temp_char_uuid": "99887766-9988-7766-9988-776699887766"
   },
   "phone": {
     "name": "PhoneBLE",
