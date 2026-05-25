@@ -18,9 +18,9 @@ CFG = json.loads((ROOT / "config.json").read_text())
 
 
 class Ble(QtCore.QThread):
-    accel = QtCore.pyqtSignal(int, float, float, float)
-    temp = QtCore.pyqtSignal(int, float)
-    phone = QtCore.pyqtSignal(int, str)
+    accel = QtCore.pyqtSignal(object, float, float, float)
+    temp = QtCore.pyqtSignal(object, float)
+    phone = QtCore.pyqtSignal(object, str)
     status = QtCore.pyqtSignal(str, str)
 
     def __init__(self):
