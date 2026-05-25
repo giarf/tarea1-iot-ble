@@ -1,8 +1,8 @@
 {
   "esp32": {
-    "name": "CatESP32",
-    "accel_char_uuid": "00002a58-0000-1000-8000-00805f9b34fb",
-    "temp_char_uuid": "00002a6e-0000-1000-8000-00805f9b34fb"
+    "name": "GATT BLE Server",
+    "accel_char_uuid": "88776655-8877-6655-8877-665588776655",
+    "temp_char_uuid": "99887766-9988-7766-9988-776699887766"
   },
   "phone": {
     "name": "PhoneBLE",

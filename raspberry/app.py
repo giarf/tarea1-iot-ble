@@ -18,9 +18,9 @@ CFG = json.loads((ROOT / "config.json").read_text())
 
 
 class Ble(QtCore.QThread):
-    accel = QtCore.pyqtSignal(int, float, float, float)
-    temp = QtCore.pyqtSignal(int, float)
-    phone = QtCore.pyqtSignal(int, str)
+    accel = QtCore.pyqtSignal(object, float, float, float)
+    temp = QtCore.pyqtSignal(object, float)
+    phone = QtCore.pyqtSignal(object, str)
     status = QtCore.pyqtSignal(str, str)
 
     def __init__(self):
@@ -50,8 +50,10 @@ class Ble(QtCore.QThread):
                     self.status.emit(kind, "conectado")
                     self.print_services(cli)
                     if kind == "esp32":
-                        await cli.start_notify(c["accel_char_uuid"], self.on_accel)
-                        await cli.start_notify(c["temp_char_uuid"], self.on_temp)
+                        if c.get("accel_char_uuid"):
+                            await cli.start_notify(c["accel_char_uuid"], self.on_accel)
+                        if c.get("temp_char_uuid"):
+                            await cli.start_notify(c["temp_char_uuid"], self.on_temp)
                     else:
                         try:
                             await cli.start_notify(c["char_uuid"], self.on_phone)
