@@ -33,8 +33,8 @@
 #include "host/ble_store.h"
 #include "os/os_mbuf.h"
 
-char name[] = "Acceleration Sample Generator";
-char short_name[] = "ASG";
+char name[] = "GATT BLE Server";
+char short_name[] = "GBS";
 
 ble_uuid128_t asg_svc_uuid = BLE_UUID128_INIT(
      0x11, 0x22, 0x33, 0x44,
@@ -50,7 +50,22 @@ ble_uuid128_t asg_chr_uuid = BLE_UUID128_INIT(
      0x55, 0x66, 0x77, 0x88,
     );
 
+ble_uuid128_t tsg_svc_uuid = BLE_UUID128_INIT(
+     0x22, 0x33, 0x44, 0x55,
+     0x22, 0x33, 0x44, 0x55,
+     0x22, 0x33, 0x44, 0x55,
+     0x22, 0x33, 0x44, 0x55,
+    );
+
+ble_uuid128_t tsg_chr_uuid = BLE_UUID128_INIT(
+     0x66, 0x77, 0x88, 0x99,
+     0x66, 0x77, 0x88, 0x99,
+     0x66, 0x77, 0x88, 0x99,
+     0x66, 0x77, 0x88, 0x99,
+    );
+
 uint16_t asg_char_attr_handle;
+uint16_t tsg_char_attr_handle;
 
 #define ACCEL_RANGE_G 16.0f
 #define ATTENUATION 0.70f /* ejes secundarios = 70 % del principal */
@@ -69,17 +84,16 @@ accel_sample_t simulate_accel(void) {
   return s;
 }
 
-int chr_access(uint16_t conn_handle, uint16_t attr_handle,
+int asg_chr_access(uint16_t conn_handle, uint16_t attr_handle,
     struct ble_gatt_access_ctxt *ctxt, void *arg) {
 
-  if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
     if (attr_handle != asg_char_attr_handle) {
       return BLE_ATT_ERR_ATTR_NOT_FOUND;
     }
 
+  if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
     accel_sample_t accel_sample = simulate_accel();
     os_mbuf_append(ctxt->om, &accel_sample, sizeof(accel_sample));
-
 
     printf("Se leyó el valores x=%f, y=%f, z=%f de la caracteristica accel_sample\n", accel_sample.ax, accel_sample.ay, accel_sample.az);
     return 0;
@@ -95,8 +109,8 @@ struct ble_gatt_svc_def gatt_svcs[] = {
     .characteristics = (struct ble_gatt_chr_def[]){
       {
         .uuid = &asg_chr_uuid.u,
-        .access_cb = chr_access,
-        .flags = BLE_GATT_CHR_F_READ,
+        .access_cb = asg_chr_access,
+        .flags = BLE_GATT_CHR_F_NOTIFY,
         .val_handle = &asg_char_attr_handle,
       },
       {0}
@@ -111,6 +125,10 @@ void on_stack_reset(int reason) {
 
 void start_adv();
 
+uint8_t notify_status = 0;
+uint16_t notify_attr = 0;
+uint16_t notify_conn = 0;
+
 int connection_event_handler(struct ble_gap_event *event, void *arg) {
   if (event->type == BLE_GAP_EVENT_CONNECT) {
     printf("Conectado con cliente %d con estado %d\n", event->connect.conn_handle, event->connect.status);
@@ -118,9 +136,37 @@ int connection_event_handler(struct ble_gap_event *event, void *arg) {
   } else if (event->type == BLE_GAP_EVENT_DISCONNECT) {
     printf("Desconectado de cliente %d por motivo %d\n", event->disconnect.conn.conn_handle, event->disconnect.reason);
     start_adv();
+
+  } else if (event->type ==  BLE_GAP_EVENT_SUBSCRIBE) {
+    printf("Subscripción de cliente %d actualizada a %d\n", event->subscribe.conn_handle, event->subscribe.cur_notify);
+    notify_status = event->subscribe.cur_notify;
+
+    if (notify_status) {
+      notify_attr = event->subscribe.attr_handle;
+      notify_conn = event->subscribe.conn_handle;
+    } else {
+      notify_attr = 0;
+      notify_conn = 0;
+    }
   }
 
   return 0;
+}
+
+void notifier_task() {
+  while (true) {
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    
+    if (notify_status) {
+      int err = ble_gatts_notify(notify_conn, notify_attr);
+      if (err) {
+        printf("Error enviando notificación de atributo %d a cliente %d\n", notify_attr, notify_conn);
+        continue;
+      }
+
+      printf("Notificación enviada por atributo %d a cliente %d\n", notify_attr, notify_conn);
+    }
+  }
 }
 
 void start_adv() {
@@ -186,6 +232,8 @@ void app_main(void) {
   ble_hs_cfg.sync_cb = on_stack_sync;
   ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
+  xTaskCreate(notifier_task, "Notifier", 4096, NULL, 5, NULL);
+  
   printf("NimBLE comenzado\n");
   nimble_port_run();
 
