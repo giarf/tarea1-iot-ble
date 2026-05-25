@@ -1,0 +1,4 @@
+bleak
+PyQt5
+pyqtgraph
+numpy
