@@ -50,8 +50,10 @@ class Ble(QtCore.QThread):
                     self.status.emit(kind, "conectado")
                     self.print_services(cli)
                     if kind == "esp32":
-                        await cli.start_notify(c["accel_char_uuid"], self.on_accel)
-                        await cli.start_notify(c["temp_char_uuid"], self.on_temp)
+                        if c.get("accel_char_uuid"):
+                            await cli.start_notify(c["accel_char_uuid"], self.on_accel)
+                        if c.get("temp_char_uuid"):
+                            await cli.start_notify(c["temp_char_uuid"], self.on_temp)
                     else:
                         try:
                             await cli.start_notify(c["char_uuid"], self.on_phone)
