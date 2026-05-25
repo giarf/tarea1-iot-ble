@@ -27,11 +27,12 @@
 #include <host/ble_gatt.h>
 #include <services/gatt/ble_svc_gatt.h>
 #include <services/gap/ble_svc_gap.h>
-#include "host/ble_att.h"
+// #include "host/ble_att.h"
 #include "host/ble_hs_adv.h"
 #include "host/ble_hs_id.h"
 #include "host/ble_store.h"
-#include "os/os_mbuf.h"
+#include "portmacro.h"
+// #include "os/os_mbuf.h"
 
 char name[] = "GATT BLE Server";
 char short_name[] = "GBS";
@@ -69,7 +70,7 @@ uint16_t tsg_char_attr_handle;
 
 #define ACCEL_RANGE_G 16.0f
 #define ATTENUATION 0.70f /* ejes secundarios = 70 % del principal */
-typedef struct { float ax, ay, az; } accel_sample_t;
+typedef struct { uint32_t t; float ax, ay, az; } accel_sample_t;
 accel_sample_t simulate_accel(void) {
   /* Eje principal: sinusoide + ruido uniforme */
   static float phase = 0.0f;
@@ -77,6 +78,7 @@ accel_sample_t simulate_accel(void) {
   float main_val = ACCEL_RANGE_G * sinf(phase)
     + ((float)rand() / RAND_MAX - 0.5f) * 1.0f;
   accel_sample_t s = {
+    .t = esp_log_timestamp(),
     .ax = main_val,
     .ay = main_val * ATTENUATION + ((float)rand()/RAND_MAX - 0.5f)*0.5f,
     .az = main_val * ATTENUATION + ((float)rand()/RAND_MAX - 0.5f)*0.5f,
@@ -87,19 +89,20 @@ accel_sample_t simulate_accel(void) {
 int asg_chr_access(uint16_t conn_handle, uint16_t attr_handle,
     struct ble_gatt_access_ctxt *ctxt, void *arg) {
 
-    if (attr_handle != asg_char_attr_handle) {
-      return BLE_ATT_ERR_ATTR_NOT_FOUND;
-    }
-
-  if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-    accel_sample_t accel_sample = simulate_accel();
-    os_mbuf_append(ctxt->om, &accel_sample, sizeof(accel_sample));
-
-    printf("Se leyó el valores x=%f, y=%f, z=%f de la caracteristica accel_sample\n", accel_sample.ax, accel_sample.ay, accel_sample.az);
+  //   if (attr_handle != asg_char_attr_handle) {
+  //     return BLE_ATT_ERR_ATTR_NOT_FOUND;
+  //   }
+  //
+  // if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
+  //   accel_sample_t accel_sample = simulate_accel();
+  //   os_mbuf_append(ctxt->om, &accel_sample, sizeof(accel_sample));
+  //
+  //   printf("Se leyó el valores x=%f, y=%f, z=%f de la caracteristica accel_sample\n", accel_sample.ax, accel_sample.ay, accel_sample.az);
+  //   return 0;
+  // }
+  //
+  // return BLE_ATT_ERR_WRITE_NOT_PERMITTED;
     return 0;
-  }
-
-  return BLE_ATT_ERR_WRITE_NOT_PERMITTED;
 }
 
 struct ble_gatt_svc_def gatt_svcs[] = {
@@ -110,7 +113,7 @@ struct ble_gatt_svc_def gatt_svcs[] = {
       {
         .uuid = &asg_chr_uuid.u,
         .access_cb = asg_chr_access,
-        .flags = BLE_GATT_CHR_F_NOTIFY,
+        .flags = BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_READ,
         .val_handle = &asg_char_attr_handle,
       },
       {0}
@@ -153,18 +156,37 @@ int connection_event_handler(struct ble_gap_event *event, void *arg) {
   return 0;
 }
 
-void notifier_task() {
-  while (true) {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    
-    if (notify_status) {
-      int err = ble_gatts_notify(notify_conn, notify_attr);
-      if (err) {
-        printf("Error enviando notificación de atributo %d a cliente %d\n", notify_attr, notify_conn);
-        continue;
-      }
+void notifier_task(void *arg) {
 
-      printf("Notificación enviada por atributo %d a cliente %d\n", notify_attr, notify_conn);
+  while (true) {
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    if (!notify_status) {
+      continue;
+    }
+
+    accel_sample_t sample = simulate_accel();
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(
+        &sample,
+        sizeof(sample)
+        );
+
+    int err = ble_gatts_notify_custom(
+        notify_conn,
+        asg_char_attr_handle,
+        om
+        );
+
+    if (err) {
+      printf("Notify error: %d\n", err);
+    } else {
+      printf(
+          "Notify OK t=%lu x=%f y=%f z=%f\n",
+          sample.t,
+          sample.ax,
+          sample.ay,
+          sample.az
+          );
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "esp32": {
-    "name": "CatESP32",
+    "name": "GATT BLE Server",
     "accel_char_uuid": "00002a58-0000-1000-8000-00805f9b34fb",
     "temp_char_uuid": "00002a6e-0000-1000-8000-00805f9b34fb"
   },
