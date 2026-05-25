@@ -28,6 +28,7 @@
 #include <services/gap/ble_svc_gap.h>
 #include <services/gatt/ble_svc_gatt.h>
 // #include "host/ble_att.h"
+#include "esp_log_timestamp.h"
 #include "host/ble_hs_adv.h"
 #include "host/ble_hs_id.h"
 #include "host/ble_store.h"
@@ -79,7 +80,11 @@ accel_sample_t simulate_accel(void) {
 
 #define TEMP_MIN 20.0f
 #define TEMP_MAX 30.0f
-float simulate_temperature(void) {
+typedef struct {
+  uint32_t t;
+  float temp;
+} temp_sample_t;
+temp_sample_t simulate_temperature(void) {
   static float temp = 25.0f;
   float delta = ((float)rand() / RAND_MAX - 0.5f) * 0.4f;
   temp += delta;
@@ -87,7 +92,11 @@ float simulate_temperature(void) {
     temp = TEMP_MIN;
   if (temp > TEMP_MAX)
     temp = TEMP_MAX;
-  return temp;
+  temp_sample_t s = {
+    .t = esp_log_timestamp(),
+    .temp = temp,
+  };
+  return s;
 }
 
 int chr_access(uint16_t conn_handle, uint16_t attr_handle,
@@ -212,7 +221,7 @@ void temp_notifier_task(void *arg) {
       continue;
     }
 
-    float sample = simulate_temperature();
+    temp_sample_t sample = simulate_temperature();
     struct os_mbuf *om = ble_hs_mbuf_from_flat(&sample, sizeof(sample));
 
     int err =
@@ -221,7 +230,7 @@ void temp_notifier_task(void *arg) {
     if (err) {
       printf("Notify error: %d\n", err);
     } else {
-      printf("Notify OK temp=%f\n", sample);
+      printf("Notify OK t=%lu temp=%f\n", sample.t, sample.temp);
     }
   }
 }
