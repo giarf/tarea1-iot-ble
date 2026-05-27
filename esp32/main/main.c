@@ -189,9 +189,10 @@ int connection_event_handler(struct ble_gap_event *event, void *arg) {
 }
 
 void accel_notifier_task(void *arg) {
+  uint32_t sample_count = 0;
 
   while (true) {
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(1));
 
     if (!accel_notify_status) {
       continue;
@@ -206,8 +207,11 @@ void accel_notifier_task(void *arg) {
     if (err) {
       printf("Notify error: %d\n", err);
     } else {
-      printf("Notify OK t=%lu x=%f y=%f z=%f\n", sample.t, sample.ax, sample.ay,
-             sample.az);
+      if (++sample_count >= 1000) {
+        sample_count = 0;
+        printf("Notify OK t=%lu x=%f y=%f z=%f (1000 samples sent)\n", sample.t, sample.ax, sample.ay,
+               sample.az);
+      }
     }
   }
 }
