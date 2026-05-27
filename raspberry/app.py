@@ -18,7 +18,7 @@ CFG = json.loads((ROOT / "config.json").read_text())
 
 
 class Ble(QtCore.QThread):
-    accel = QtCore.pyqtSignal(object, float, float, float)
+    accel = QtCore.pyqtSignal(list)
     temp = QtCore.pyqtSignal(object, float)
     phone = QtCore.pyqtSignal(object, str)
     status = QtCore.pyqtSignal(str, str)
@@ -60,14 +60,14 @@ class Ble(QtCore.QThread):
                     else:
                         try:
                             await cli.start_notify(c["char_uuid"], self.on_phone)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            print(f"Error starting phone notify: {e}")
                     while cli.is_connected and not self.stop:
                         if kind == "phone":
                             try:
                                 self.emit_phone(await cli.read_gatt_char(c["char_uuid"]))
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                print(f"Error reading phone char: {e}")
                         await asyncio.sleep(1)
             except Exception as e:
                 self.status.emit(kind, f"reconectando: {e}")
@@ -82,7 +82,12 @@ class Ble(QtCore.QThread):
 
     def on_accel(self, _, data):
         if len(data) >= 16:
-            self.accel.emit(*struct.unpack("<Ifff", data[:16]))
+            if not hasattr(self, "_accel_buf"):
+                self._accel_buf = []
+            self._accel_buf.append(struct.unpack("<Ifff", data[:16]))
+            if len(self._accel_buf) >= 50:
+                self.accel.emit(self._accel_buf)
+                self._accel_buf = []
 
     def on_temp(self, _, data):
         if len(data) >= 8:
@@ -153,9 +158,10 @@ class App(QtWidgets.QMainWindow):
         self.st[k] = s
         self.label()
 
-    def on_accel(self, t, x, y, z):
-        self.data.append((t, x, y, z))
-        self.write([t, "esp32_accel", x, y, z, "", ""])
+    def on_accel(self, samples):
+        for t, x, y, z in samples:
+            self.data.append((t, x, y, z))
+            self.write([t, "esp32_accel", x, y, z, "", ""])
 
     def on_temp(self, t, val):
         self.st["temp"] = f"{val:.2f} C @ {t}"
