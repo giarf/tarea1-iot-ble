@@ -31,6 +31,7 @@ class Ble(QtCore.QThread):
         asyncio.run(self.main())
 
     async def main(self):
+        self.scan_lock = asyncio.Lock()
         await asyncio.gather(self.loop("esp32"), self.loop("phone"))
 
     async def loop(self, kind):
@@ -39,7 +40,9 @@ class Ble(QtCore.QThread):
             try:
                 self.status.emit(kind, "buscando")
                 print(f"Buscando dispositivo por nombre: {c['name']}")
-                dev = await BleakScanner.find_device_by_name(c["name"], timeout=5.0)
+                async with self.scan_lock:
+                    dev = await BleakScanner.find_device_by_name(c["name"], timeout=5.0)
+                    await asyncio.sleep(1.0)
                 if not dev:
                     print(f"No encontrado por nombre: {c['name']}")
                     await asyncio.sleep(2)
